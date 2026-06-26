@@ -949,6 +949,10 @@ body { background: var(--bg); color: var(--text); font-family: "Archivo", sans-s
 
         <input type="hidden" id="as-summary-field" name="_summary">
         <input type="hidden" id="as-subject-field" name="_subject">
+        <input type="hidden" id="as-coe-pretty" name="coePretty">
+        <input type="hidden" id="as-emd-pretty" name="emdPretty">
+        <input type="hidden" id="as-emd-deadline-pretty" name="emdDeadlinePretty">
+        <input type="hidden" id="as-price-pretty" name="pricePretty">
 
         <div class="da-actions">
           <button type="submit" class="da-submit" id="as-submit">Send to TC &rarr;</button>
@@ -1023,7 +1027,7 @@ function goSection(btn, id) {
 (function(){
   /* Same Google Apps Script endpoint the contract (Draft Agreement) form uses,
      so assignments email Transactions@1houroffers.com the same way. */
-  const ASSIGN_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz4GIeLJj_3h00RYW33S25u3zksLY8E7rgnaP-C5AWbMuhjbf70tKb5jSiSl1-3fa5BcQ/exec";
+  const ASSIGN_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzR5vGIUhDa9hVJxR5iN6SJYYGcPIuuJZFXuYtj-uY2kLDqWmIXA09a0Amn2g6lswZsBg/exec";
 
   const form = document.getElementById('as-form');
   if(!form) return;
@@ -1420,6 +1424,13 @@ function goSection(btn, id) {
     return out;
   }
 
+  function fmtDate(s){
+    if(!s) return '';
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if(!m) return s;
+    return parseInt(m[2],10) + '/' + parseInt(m[3],10) + '/' + m[1];
+  }
+
   function buildSummary(){
     const v = id => el(id).value.trim();
     const lines = [];
@@ -1432,7 +1443,7 @@ function goSection(btn, id) {
     lines.push('Assignee LLC - '   + v('as-llc'));
     lines.push('Address - '        + v('as-address'));
     lines.push('Title Company - '  + v('as-title'));
-    lines.push('COE - '            + v('as-coe'));
+    lines.push('COE - '            + fmtDate(v('as-coe')));
     lines.push('Earnest Money - '  + (v('as-emd')   ? '$'+v('as-emd')   : ''));
     lines.push('EMD Deadline - '   + fmtDeadline(v('as-emd-deadline'), stateFromAddress()));
     lines.push('Assigned Price - ' + (v('as-price') ? '$'+v('as-price') : ''));
@@ -1480,6 +1491,11 @@ function goSection(btn, id) {
     function finish(){
       el('as-summary-field').value = buildSummary();
       el('as-subject-field').value = buildSubject();
+      const vv = id => el(id).value.trim();
+      el('as-coe-pretty').value          = fmtDate(vv('as-coe'));
+      el('as-emd-pretty').value          = vv('as-emd')   ? '$' + vv('as-emd')   : '';
+      el('as-emd-deadline-pretty').value = fmtDeadline(vv('as-emd-deadline'), stateFromAddress());
+      el('as-price-pretty').value        = vv('as-price') ? '$' + vv('as-price') : '';
       if(ASSIGN_SCRIPT_URL){
         el('as-submit').disabled = true;
         el('as-submit').textContent = 'Sending…';
