@@ -1727,22 +1727,22 @@ function goSection(btn, id) {
     lines.push('');
     const mgr = el('as-acq-val').value, mgrEmail = el('as-acq-email').value;
     if(mgr) lines.push('Dispo Manager - ' + mgr + (mgrEmail ? ' (' + mgrEmail + ')' : ''));
+    lines.push('');
     lines.push('Assignee Name - '  + v('as-assignee'));
     lines.push('Assignee Email - ' + v('as-email'));
-    lines.push('Assignee LLC - '   + v('as-llc'));
-    lines.push('Phone - '          + v('as-phone'));
+    lines.push('Assignee Phone - ' + v('as-phone'));
     if(el('as-add2').checked){
       lines.push('Assignee 2 Name - '  + v('as-assignee2'));
       lines.push('Assignee 2 Email - ' + v('as-email2'));
     }
+    lines.push('Assignee LLC - '   + v('as-llc'));
+    lines.push('');
     lines.push('Address - '        + v('as-address'));
     lines.push('Title Company - '  + v('as-title'));
     lines.push('COE - '            + fmtDate(v('as-coe')));
     lines.push('Earnest Money - '  + (v('as-emd')   ? '$'+v('as-emd')   : ''));
     lines.push('EMD Deadline - '   + fmtDeadline(v('as-emd-deadline'), stateFromAddress()));
     lines.push('Assigned Price - ' + (v('as-price') ? '$'+v('as-price') : ''));
-    const contractName = (el('as-file-name-field').value || '').trim();
-    lines.push('Original Contract - ' + (contractName ? contractName + (pickedRedacted ? ' (unredacted + redacted copies attached)' : ' (unredacted attached)') : 'not provided'));
     const notes = v('as-notes');
     if(notes) lines.push('', 'Additional Terms: ' + notes);
     return lines.join('\n');
