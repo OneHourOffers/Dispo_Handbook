@@ -726,9 +726,6 @@ body { background: var(--bg); color: var(--text); font-family: "Archivo", sans-s
 .da-file-chip .da-file-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:500; }
 .da-file-remove { border:none; background:transparent; color:var(--text-muted); font-size:15px; cursor:pointer; line-height:1; padding:2px 6px; border-radius:6px; }
 .da-file-remove:hover { color:var(--coral); background:rgba(243,138,129,.12); }
-.da-redact-toggle { display:inline-flex; gap:3px; padding:2px; background:var(--surface); border:1px solid var(--border2); border-radius:8px; margin-left:auto; flex:none; }
-.da-redact-opt { border:none; background:transparent; color:var(--text-muted); font-size:10.5px; font-weight:600; padding:3px 9px; border-radius:6px; cursor:pointer; transition:background .15s, color .15s; }
-.da-redact-opt.active { background:var(--coral); color:#fff; }
 .da-snips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .da-snips-label { font-size: 11px; color: var(--text-muted); font-weight: 600; }
 .da-snip { background: var(--accent-light); color: var(--accent); border: none; border-radius: 999px; padding: 5px 12px; font-family: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; transition: background 0.12s, color 0.12s; }
@@ -986,11 +983,7 @@ body { background: var(--bg); color: var(--text); font-family: "Archivo", sans-s
             <input type="file" id="as-contract" accept=".pdf,.doc,.docx,image/*" style="display:none">
             <div class="da-file-drop" id="as-file-drop">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              <span id="as-file-droptext">Click to upload the original purchase contract</span>
-              <div class="da-redact-toggle" id="as-redact-toggle" role="group" aria-label="Redaction">
-                <button type="button" class="da-redact-opt active" data-redact="on">Redact</button>
-                <button type="button" class="da-redact-opt" data-redact="off">Keep original</button>
-              </div>
+              <span id="as-file-droptext">Click to upload the original purchase contract &mdash; a redacted copy is generated automatically</span>
             </div>
             <div class="da-file-chip" id="as-file-chip" style="display:none">
               <span class="da-file-name" id="as-file-name"></span>
@@ -1017,6 +1010,7 @@ body { background: var(--bg); color: var(--text); font-family: "Archivo", sans-s
         <input type="hidden" id="as-file-data" name="_fileData">
         <input type="hidden" id="as-file-name-field" name="_fileName">
         <input type="hidden" id="as-file-type" name="_fileType">
+        <input type="hidden" id="as-file-data-red" name="_fileDataRedacted">
 
         <input type="hidden" id="as-summary-field" name="_summary">
         <input type="hidden" id="as-subject-field" name="_subject">
@@ -1024,7 +1018,6 @@ body { background: var(--bg); color: var(--text); font-family: "Archivo", sans-s
         <input type="hidden" id="as-emd-pretty" name="emdPretty">
         <input type="hidden" id="as-emd-deadline-pretty" name="emdDeadlinePretty">
         <input type="hidden" id="as-price-pretty" name="pricePretty">
-        <input type="hidden" id="as-handoff-field" name="_handoffUrl">
 
         <div class="da-actions">
           <button type="submit" class="da-submit" id="as-submit">Send to TC &rarr;</button>
@@ -1476,21 +1469,21 @@ function goSection(btn, id) {
   const fileNameEl= el('as-file-name');
   const fileErr   = el('as-file-err');
   const MAX_FILE_MB = 15;
-  let pickedFile = null;     // Blob/File actually attached (redacted when possible)
-  let originalFile = null;   // raw uploaded File (kept so we can re-process on toggle)
+  let originalFile = null;   // raw uploaded File — always emailed as the UNREDACTED copy
+  let redactedBlob = null;   // auto-redacted PDF — emailed alongside when generated
   let pickedName = '';       // original filename
-  let pickedType = '';       // mime type to send
-  let pickedRedacted = false;
-  let redactEnabled = true;  // default: redact
+  let pickedType = '';       // mime type of the original
+  let pickedRedacted = false; // true when a redacted copy was generated
 
   function fmtSize(b){ return b < 1024*1024 ? (b/1024).toFixed(0)+' KB' : (b/1048576).toFixed(1)+' MB'; }
 
   function clearContract(){
-    pickedFile = null; originalFile = null; pickedName = ''; pickedType = ''; pickedRedacted = false;
+    originalFile = null; redactedBlob = null; pickedName = ''; pickedType = ''; pickedRedacted = false;
     if(fileInput) fileInput.value = '';
     el('as-file-data').value = '';
     el('as-file-name-field').value = '';
     el('as-file-type').value = '';
+    el('as-file-data-red').value = '';
     fileChip.style.display = 'none';
     fileDrop.style.display = '';
     fileErr.textContent = '';
@@ -1529,33 +1522,25 @@ function goSection(btn, id) {
     if(!f) return;
     pickedName = f.name;
     pickedType = f.type || 'application/octet-stream';
+    redactedBlob = null;
+    pickedRedacted = false;
     fileErr.textContent = '';
     fileDrop.style.display = 'none';
     fileChip.style.display = 'flex';
 
     const isPdf = (f.type === 'application/pdf') || /\.pdf$/i.test(f.name);
-    if(redactEnabled && isPdf && window.PDFLib){
-      fileNameEl.textContent = f.name + '  ·  redacting…';
+    if(isPdf && window.PDFLib){
+      fileNameEl.textContent = f.name + '  ·  building redacted copy…';
       try {
-        const redacted = await redactContractPdf(f);
-        pickedFile = redacted;
-        pickedType = 'application/pdf';
+        redactedBlob = await redactContractPdf(f);
         pickedRedacted = true;
-        fileNameEl.innerHTML = escAttr(f.name) + '  ·  ' + fmtSize(redacted.size) +
-          '  <span style="color:var(--coral);font-weight:600;">· price, EMD &amp; seller info hidden</span>';
+        fileNameEl.innerHTML = escAttr(f.name) + '  ·  ' + fmtSize(f.size) +
+          '  <span style="color:var(--coral);font-weight:600;">· unredacted + redacted copies will be emailed</span>';
       } catch(err){
-        pickedFile = f;
-        pickedType = f.type || 'application/pdf';
-        pickedRedacted = false;
-        fileNameEl.textContent = f.name + '  ·  ' + fmtSize(f.size) + '  ·  could not auto-redact — sending original';
+        fileNameEl.textContent = f.name + '  ·  ' + fmtSize(f.size) + '  ·  could not auto-redact — sending unredacted only';
       }
     } else {
-      pickedFile = f;
-      pickedType = f.type || 'application/octet-stream';
-      pickedRedacted = false;
-      let note = '';
-      if(!redactEnabled) note = '  ·  original (not redacted)';
-      else if(!isPdf)    note = '  ·  not a PDF — sending original';
+      const note = isPdf ? '' : '  ·  not a PDF — sending as-is (no redacted copy)';
       fileNameEl.textContent = f.name + '  ·  ' + fmtSize(f.size) + note;
     }
   }
@@ -1573,36 +1558,29 @@ function goSection(btn, id) {
       await processContract();
     });
     el('as-file-remove').addEventListener('click', clearContract);
-    fileDrop.addEventListener('click', (e)=>{
-      if(e.target.closest('.da-redact-toggle')) return;  // let the toggle do its thing
-      fileInput.click();
-    });
+    fileDrop.addEventListener('click', ()=> fileInput.click());
   }
 
-  // Redact / keep-original toggle (default: redact)
-  root.querySelectorAll('.da-redact-opt').forEach(btn=>{
-    btn.addEventListener('click', async ()=>{
-      redactEnabled = btn.dataset.redact === 'on';
-      root.querySelectorAll('.da-redact-opt').forEach(b=> b.classList.toggle('active', b === btn));
-      if(originalFile) await processContract();
-    });
-  });
-
-  function readContractB64(){
+  function blobToB64(blob){
     return new Promise((resolve, reject)=>{
-      if(!pickedFile){ resolve(false); return; }
       const r = new FileReader();
       r.onload = ()=>{
         const res = String(r.result || '');
         const comma = res.indexOf(',');
-        el('as-file-data').value = comma >= 0 ? res.slice(comma+1) : res;
-        el('as-file-name-field').value = pickedName || 'contract';
-        el('as-file-type').value = pickedType || 'application/octet-stream';
-        resolve(true);
+        resolve(comma >= 0 ? res.slice(comma+1) : res);
       };
       r.onerror = ()=> reject(r.error || new Error('read failed'));
-      r.readAsDataURL(pickedFile);
+      r.readAsDataURL(blob);
     });
+  }
+
+  async function readContractB64(){
+    if(!originalFile) return false;
+    el('as-file-data').value       = await blobToB64(originalFile);
+    el('as-file-name-field').value = pickedName || 'contract';
+    el('as-file-type').value       = pickedType || 'application/octet-stream';
+    el('as-file-data-red').value   = redactedBlob ? await blobToB64(redactedBlob) : '';
+    return true;
   }
 
   // Quick-add verbiage for Additional Terms
@@ -1764,7 +1742,7 @@ function goSection(btn, id) {
     lines.push('EMD Deadline - '   + fmtDeadline(v('as-emd-deadline'), stateFromAddress()));
     lines.push('Assigned Price - ' + (v('as-price') ? '$'+v('as-price') : ''));
     const contractName = (el('as-file-name-field').value || '').trim();
-    lines.push('Original Contract - ' + (contractName ? contractName + (pickedRedacted ? ' (redacted copy attached)' : ' (original, not redacted)') : 'not provided'));
+    lines.push('Original Contract - ' + (contractName ? contractName + (pickedRedacted ? ' (unredacted + redacted copies attached)' : ' (unredacted attached)') : 'not provided'));
     const notes = v('as-notes');
     if(notes) lines.push('', 'Additional Terms: ' + notes);
     return lines.join('\n');
@@ -1783,48 +1761,6 @@ function goSection(btn, id) {
     else if(state)    loc = state;
     const tail = loc ? (street + ' / ' + loc) : street;
     return 'Assignment Needed - ' + tail;
-  }
-
-  // UTF-8 safe base64url (matches the decoder in handoff.html)
-  function b64urlEncode(str){
-    const b64 = btoa(unescape(encodeURIComponent(str)));
-    return b64.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-  }
-
-  function buildHandoffUrl(){
-    const v = id => el(id).value.trim();
-    const mgr = el('as-acq-val').value, mgrEmail = el('as-acq-email').value;
-    const fields = [
-      ['Dispo Manager',  mgr + (mgrEmail ? ' (' + mgrEmail + ')' : '')],
-      ['Assignee Name',  v('as-assignee')],
-      ['Assignee Email', v('as-email')],
-      ['Assignee LLC',   v('as-llc')],
-      ['Phone',          v('as-phone')],
-      ['Address',        v('as-address')],
-      ['Title Company',  v('as-title')],
-      ['COE',            fmtDate(v('as-coe'))],
-      ['Earnest Money',  v('as-emd')   ? '$' + v('as-emd')   : ''],
-      ['EMD Deadline',   fmtDeadline(v('as-emd-deadline'), stateFromAddress())],
-      ['Assigned Price', v('as-price') ? '$' + v('as-price') : '']
-    ];
-    const contractName = (el('as-file-name-field').value || '').trim();
-    if(el('as-add2').checked){
-      fields.splice(5, 0,
-        ['Assignee 2 Name',  v('as-assignee2')],
-        ['Assignee 2 Email', v('as-email2')]
-      );
-    }
-    fields.push(['Original Contract', contractName ? contractName + (pickedRedacted ? ' (redacted copy attached)' : ' (original, not redacted)') : 'not provided']);
-    const notes = v('as-notes');
-    if(notes) fields.push(['Additional Terms', notes]);
-    const payload = {
-      t: 'ASSIGNMENT INTAKE',
-      title: v('as-address') || 'Assignment',
-      at: new Date().toLocaleString(),
-      fields: fields
-    };
-    const base = location.href.split('#')[0].replace(/[^/]*$/, '') + 'handoff.html';
-    return base + '#' + b64urlEncode(JSON.stringify(payload));
   }
 
   let submitted = false;
@@ -1854,7 +1790,6 @@ function goSection(btn, id) {
       el('as-emd-pretty').value          = vv('as-emd')   ? '$' + vv('as-emd')   : '';
       el('as-emd-deadline-pretty').value = fmtDeadline(vv('as-emd-deadline'), stateFromAddress());
       el('as-price-pretty').value        = vv('as-price') ? '$' + vv('as-price') : '';
-      el('as-handoff-field').value       = buildHandoffUrl();
       if(ASSIGN_SCRIPT_URL){
         el('as-submit').disabled = true;
         el('as-submit').textContent = 'Sending…';
@@ -1868,7 +1803,7 @@ function goSection(btn, id) {
       }
     }
 
-    if(pickedFile){
+    if(originalFile){
       el('as-submit').disabled = true;
       el('as-submit').textContent = 'Attaching…';
       readContractB64().then(()=> finish()).catch(()=>{
@@ -1896,8 +1831,6 @@ function goSection(btn, id) {
     acClose();
     if(typeof tcClose === 'function') tcClose();
     if(typeof clearContract === 'function') clearContract();
-    redactEnabled = true;
-    root.querySelectorAll('.da-redact-opt').forEach(b=> b.classList.toggle('active', b.dataset.redact === 'on'));
     autoGrow(); updateChips();
     fields.forEach(f=>{ el(f.id).classList.remove('err'); el(f.id).closest('.da-field').classList.remove('show-err'); });
     el('as-submit').disabled = false;
