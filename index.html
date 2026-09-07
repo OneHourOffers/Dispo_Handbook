@@ -878,7 +878,6 @@ body { background: var(--bg); color: var(--text); font-family: "Archivo", sans-s
       <form class="da-form" id="as-form" novalidate>
         <div class="da-subhead">Dispo Manager <span class="req">*</span></div>
         <div class="da-acq" id="as-acq">
-          <button type="button" class="as-acq-btn" data-acq="Daniel Santos" data-acq-email="Daniel@1houroffers.com">Daniel Santos</button>
           <button type="button" class="as-acq-btn" data-acq="OHO" data-acq-email="admin@1houroffers.com">OHO</button>
         </div>
         <div class="da-acq-err" id="as-acq-err">Pick the dispo manager sending this.</div>
@@ -1060,7 +1059,6 @@ body { background: var(--bg); color: var(--text); font-family: "Archivo", sans-s
       <form class="da-form" id="aa-form" novalidate>
         <div class="da-subhead">Dispo Manager <span class="req">*</span></div>
         <div class="da-acq" id="aa-acq">
-          <button type="button" class="da-acq-btn" data-acq="Daniel Santos" data-acq-email="Daniel@1houroffers.com">Daniel Santos</button>
           <button type="button" class="da-acq-btn" data-acq="OHO" data-acq-email="admin@1houroffers.com">OHO</button>
         </div>
         <div class="da-acq-err" id="aa-acq-err">Pick the dispo manager sending this.</div>
@@ -1628,7 +1626,7 @@ function goSection(btn, id) {
     });
   });
 
-  // Dispo Manager selector — Daniel Santos auto-selected
+  // Dispo Manager selector — first option auto-selected
   function selectAcq(btn){
     root.querySelectorAll('.as-acq-btn').forEach(b=>b.classList.remove('on'));
     btn.classList.add('on');
@@ -1640,7 +1638,7 @@ function goSection(btn, id) {
     btn.addEventListener('click', ()=>selectAcq(btn));
   });
   function selectDefaultAcq(){
-    const def = root.querySelector('.as-acq-btn[data-acq="Daniel Santos"]') || root.querySelector('.as-acq-btn');
+    const def = root.querySelector('.as-acq-btn');
     if(def) selectAcq(def);
   }
   selectDefaultAcq();
@@ -2370,7 +2368,7 @@ function goSection(btn, id) {
   }
   el('aa-add-signer').addEventListener('click', addSigner);
 
-  /* === Dispo Manager selector (Daniel auto-selected) === */
+  /* === Dispo Manager selector (first option auto-selected) === */
   form.querySelectorAll('#aa-acq .da-acq-btn').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       form.querySelectorAll('#aa-acq .da-acq-btn').forEach(b=>b.classList.remove('on'));
